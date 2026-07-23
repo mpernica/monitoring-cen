@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.ticket { position: relative; }
+.ticket::before {
+  content: "";
+  position: absolute;
+  left: -1px; top: 50%;
+  width: 14px; height: 14px;
+  background: #14161A;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  border-right: 1px dashed #3A3F46;
+}
+
+@keyframes slideUp { from { transform: translateY(24px); opacity: 0.6; } to { transform: translateY(0); opacity: 1; } }
+.animate-slide-up { animation: slideUp 0.2s ease-out; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }

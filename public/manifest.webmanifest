@@ -1,0 +1,9 @@
+{
+  "name": "Kontrola cen",
+  "short_name": "Kontrola cen",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#14161A",
+  "theme_color": "#14161A",
+  "icons": []
+}
