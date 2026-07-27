@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Camera, Check, ChevronLeft, Search, X, PackageX, TrendingUp, TrendingDown, Minus,
-  MapPin, LocateFixed, Link2, CircleDollarSign, Sparkles, LogOut, Loader2, Plus,
+  MapPin, LocateFixed, Link2, CircleDollarSign, Sparkles, LogOut, Loader2, Plus, RefreshCw,
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
@@ -207,6 +207,7 @@ function MainApp({ profile }) {
 
   const [activeGroup, setActiveGroup] = useState("Vše");
   const [onlyPriced, setOnlyPriced] = useState(false);
+  const [onlyGrouped, setOnlyGrouped] = useState(false);
   const [query, setQuery] = useState("");
   const [sheetItem, setSheetItem] = useState(null);
   const [toast, setToast] = useState(null);
@@ -258,6 +259,7 @@ function MainApp({ profile }) {
     setBranchId(id);
     setActiveGroup("Vše");
     setOnlyPriced(false);
+    setOnlyGrouped(false);
     setQuery("");
     loadChainData(chainId);
   };
@@ -298,8 +300,9 @@ function MainApp({ profile }) {
     return merged
       .filter((p) => activeGroup === "Vše" || p.group === activeGroup)
       .filter((p) => !onlyPriced || p.price != null)
+      .filter((p) => !onlyGrouped || p.price_group_id != null)
       .filter((p) => p.name.toLowerCase().includes(query.toLowerCase()));
-  }, [merged, activeGroup, onlyPriced, query]);
+  }, [merged, activeGroup, onlyPriced, onlyGrouped, query]);
 
   const grouped = useMemo(() => {
     const map = {};
@@ -309,6 +312,17 @@ function MainApp({ profile }) {
     });
     return map;
   }, [filtered]);
+
+  // Obnovit data automaticky, když se uživatel do appky vrátí (přepnutí appek,
+  // uzamčená obrazovka apod.) — nespoléhat jen na ruční tlačítko.
+  useEffect(() => {
+    if (!branchId) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") loadChainData(chainId);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [branchId, chainId]);
 
   const checkedToday = merged.filter((p) => daysAgo(p.checkedAt) === 0).length;
 
@@ -394,6 +408,15 @@ function MainApp({ profile }) {
             </div>
           </div>
           <button
+            onClick={() => loadChainData(chainId)}
+            disabled={loadingBranchData}
+            className="w-9 h-9 rounded-lg bg-surface flex items-center justify-center shrink-0 disabled:opacity-50"
+            aria-label="Obnovit data"
+            title="Obnovit sortiment a ceny"
+          >
+            <RefreshCw size={15} className={`text-secondary ${loadingBranchData ? "spin" : ""}`} />
+          </button>
+          <button
             onClick={() => supabase.auth.signOut()}
             className="w-9 h-9 rounded-lg bg-surface flex items-center justify-center shrink-0"
             aria-label="Odhlásit se"
@@ -443,6 +466,14 @@ function MainApp({ profile }) {
             }`}
           >
             <CircleDollarSign size={14} /> Jen s cenou
+          </button>
+          <button
+            onClick={() => setOnlyGrouped((v) => !v)}
+            className={`shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium border transition ${
+              onlyGrouped ? "bg-amber/10 text-amber border-amber/40" : "bg-transparent text-strong border-hair2"
+            }`}
+          >
+            <Link2 size={14} /> Skupinové ceny
           </button>
         </div>
       </div>
@@ -825,12 +856,23 @@ function EditSheet({ product, siblings, onClose, onSave }) {
   const [price, setPrice] = useState(unpriced ? "" : String(product.price).replace(".", ","));
   const [scanning, setScanning] = useState(false);
   const [applyToGroup, setApplyToGroup] = useState(true);
+  const [excluded, setExcluded] = useState(() => new Set());
   const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
 
   const parsed = parseFloat(price.replace(",", "."));
   const valid = !Number.isNaN(parsed) && parsed > 0;
   const hasGroup = siblings.length > 0;
+  const includedSiblings = siblings.filter((s) => !excluded.has(s.id));
+
+  const toggleSibling = (id) => {
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const mockScan = () => {
     setScanning(true);
@@ -845,7 +887,7 @@ function EditSheet({ product, siblings, onClose, onSave }) {
   const savePrice = async () => {
     if (!valid || saving) return;
     setSaving(true);
-    const targetIds = applyToGroup && hasGroup ? [product.id, ...siblings.map((s) => s.id)] : [product.id];
+    const targetIds = applyToGroup && hasGroup ? [product.id, ...includedSiblings.map((s) => s.id)] : [product.id];
     const msg = unpriced ? "Položka zalistována" : targetIds.length > 1 ? `Cena uložena pro ${targetIds.length} položky` : "Cena uložena";
     await onSave(targetIds, { price: parsed, onShelf: true }, msg);
     setSaving(false);
@@ -903,22 +945,42 @@ function EditSheet({ product, siblings, onClose, onSave }) {
         {product.prev != null && <div className="text-xs text-muted font-mono mb-4">Dříve: {fmt(product.prev)} Kč</div>}
 
         {hasGroup && (
-          <button
-            onClick={() => setApplyToGroup((v) => !v)}
-            className={`w-full flex items-start gap-3 rounded-xl px-4 py-3 mb-5 text-left transition border ${
-              applyToGroup ? "border-amber bg-amber/10" : "border-hair2"
-            }`}
-          >
-            <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5 ${applyToGroup ? "bg-amber" : "border border-[#3A3F46]"}`}>
-              {applyToGroup && <Check size={13} color="#14161A" />}
-            </div>
-            <div>
+          <div className="mb-5">
+            <button
+              onClick={() => setApplyToGroup((v) => !v)}
+              className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 text-left transition border ${
+                applyToGroup ? "border-amber bg-amber/10 rounded-b-none border-b-0" : "border-hair2"
+              }`}
+            >
+              <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 ${applyToGroup ? "bg-amber" : "border border-[#3A3F46]"}`}>
+                {applyToGroup && <Check size={13} color="#14161A" />}
+              </div>
               <div className="text-sm font-medium flex items-center gap-1.5">
                 <Link2 size={13} className="text-amber" /> Uplatnit i na stejnou skupinu
               </div>
-              <div className="text-xs text-secondary mt-0.5">{siblings.map((s) => s.name).join(", ")}</div>
-            </div>
-          </button>
+            </button>
+
+            {applyToGroup && (
+              <div className="border border-t-0 border-amber/40 rounded-b-xl px-4 py-3 space-y-2">
+                <div className="text-xs text-secondary mb-1">Odškrtněte, co se má vynechat:</div>
+                {siblings.map((s) => {
+                  const checked = !excluded.has(s.id);
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => toggleSibling(s.id)}
+                      className="w-full flex items-center gap-2.5 text-left"
+                    >
+                      <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 ${checked ? "bg-amber" : "border border-[#3A3F46]"}`}>
+                        {checked && <Check size={11} color="#14161A" />}
+                      </div>
+                      <span className={`text-sm ${checked ? "text-strong" : "text-faint line-through"}`}>{s.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
 
         <button
@@ -928,7 +990,7 @@ function EditSheet({ product, siblings, onClose, onSave }) {
           style={{ background: valid ? "#FFB020" : "#3A3F46", color: "#14161A" }}
         >
           {saving && <Loader2 size={16} className="spin" />}
-          {unpriced ? "Zalistovat s touto cenou" : applyToGroup && hasGroup ? `Uložit cenu pro ${siblings.length + 1} položky` : "Uložit cenu"}
+          {unpriced ? "Zalistovat s touto cenou" : applyToGroup && hasGroup ? `Uložit cenu pro ${includedSiblings.length + 1} položky` : "Uložit cenu"}
         </button>
 
         {!unpriced && (
