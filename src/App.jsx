@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.1.0";
 
 const fmt = (v) => new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 
@@ -209,7 +209,7 @@ function MainApp({ profile }) {
 
   const [activeGroup, setActiveGroup] = useState("Vše");
   const [onlyPriced, setOnlyPriced] = useState(false);
-  const [onlyGrouped, setOnlyGrouped] = useState(false);
+  const [priceGroupFilter, setPriceGroupFilter] = useState(""); // "" = vypnuto, "ALL" = kterákoli skupina, jinak konkrétní price_group_id
   const [query, setQuery] = useState("");
   const [sheetItem, setSheetItem] = useState(null);
   const [toast, setToast] = useState(null);
@@ -241,7 +241,7 @@ function MainApp({ profile }) {
   const loadChainData = async (cId) => {
     setLoadingBranchData(true);
     const [productsRes, listingsRes, groupsRes] = await Promise.all([
-      supabase.from("products").select("*, product_groups(name)").eq("active", true),
+      supabase.from("products").select("*, product_groups(name), price_groups(name)").eq("active", true),
       supabase.from("listings").select("*").eq("chain_id", cId),
       supabase.from("product_groups").select("*").order("name"),
     ]);
@@ -261,7 +261,7 @@ function MainApp({ profile }) {
     setBranchId(id);
     setActiveGroup("Vše");
     setOnlyPriced(false);
-    setOnlyGrouped(false);
+    setPriceGroupFilter("");
     setQuery("");
     loadChainData(chainId);
   };
@@ -285,6 +285,7 @@ function MainApp({ profile }) {
         name: p.name,
         group: p.product_groups?.name || "Ostatní",
         price_group_id: p.price_group_id,
+        price_group_name: p.price_groups?.name || null,
         price: listing?.current_price ?? null,
         prev: listing?.previous_price ?? null,
         checkedAt: listing?.last_checked_at ?? null,
@@ -298,13 +299,27 @@ function MainApp({ profile }) {
 
   const unpricedCount = merged.filter((p) => p.price == null).length;
 
+  const priceGroupsPresent = useMemo(() => {
+    const map = new Map();
+    merged.forEach((p) => {
+      if (p.price_group_id && !map.has(p.price_group_id)) {
+        map.set(p.price_group_id, p.price_group_name || "Bez názvu");
+      }
+    });
+    return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "cs"));
+  }, [merged]);
+
   const filtered = useMemo(() => {
     return merged
       .filter((p) => activeGroup === "Vše" || p.group === activeGroup)
       .filter((p) => !onlyPriced || p.price != null)
-      .filter((p) => !onlyGrouped || p.price_group_id != null)
+      .filter((p) => {
+        if (!priceGroupFilter) return true;
+        if (priceGroupFilter === "ALL") return p.price_group_id != null;
+        return p.price_group_id === priceGroupFilter;
+      })
       .filter((p) => p.name.toLowerCase().includes(query.toLowerCase()));
-  }, [merged, activeGroup, onlyPriced, onlyGrouped, query]);
+  }, [merged, activeGroup, onlyPriced, priceGroupFilter, query]);
 
   const grouped = useMemo(() => {
     const map = {};
@@ -469,14 +484,24 @@ function MainApp({ profile }) {
           >
             <CircleDollarSign size={14} /> Jen s cenou
           </button>
-          <button
-            onClick={() => setOnlyGrouped((v) => !v)}
-            className={`shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium border transition ${
-              onlyGrouped ? "bg-amber/10 text-amber border-amber/40" : "bg-transparent text-strong border-hair2"
-            }`}
-          >
-            <Link2 size={14} /> Skupinové ceny
-          </button>
+          {priceGroupsPresent.length > 0 && (
+            <div className="shrink-0 relative">
+              <select
+                value={priceGroupFilter}
+                onChange={(e) => setPriceGroupFilter(e.target.value)}
+                className={`appearance-none pl-3.5 pr-7 py-1.5 rounded-full text-sm font-medium border outline-none ${
+                  priceGroupFilter ? "bg-amber/10 text-amber border-amber/40" : "bg-transparent text-strong border-hair2"
+                }`}
+              >
+                <option value="">Skupinové ceny</option>
+                <option value="ALL">Všechny skupinové ceny</option>
+                {priceGroupsPresent.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+              <Link2 size={12} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-current" />
+            </div>
+          )}
         </div>
       </div>
 
