@@ -5,6 +5,8 @@ import {
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
+const APP_VERSION = "1.0.0";
+
 const fmt = (v) => new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 
 function daysAgo(dateStr) {
@@ -111,7 +113,7 @@ function LoginScreen() {
   return (
     <div className="min-h-screen bg-app text-white flex flex-col justify-center px-6">
       <div className="text-xs uppercase tracking-[0.2em] text-amber font-semibold mb-2 text-center">
-        Kontrola cen
+        Kontrola cen <span className="text-faint normal-case tracking-normal">v{APP_VERSION}</span>
       </div>
       <h1 className="font-display text-4xl leading-tight text-center mb-8">Přihlášení</h1>
       <form onSubmit={submit} className="space-y-3 max-w-sm mx-auto w-full">
@@ -551,7 +553,9 @@ function ChainPicker({ chains, onPick, profile }) {
     <div className="min-h-screen bg-app text-white flex flex-col">
       <div className="px-6 pt-16 pb-6 flex items-start justify-between">
         <div>
-          <div className="text-xs uppercase tracking-[0.2em] text-amber font-semibold mb-2">Kontrola cen</div>
+          <div className="text-xs uppercase tracking-[0.2em] text-amber font-semibold mb-2">
+            Kontrola cen <span className="text-faint normal-case tracking-normal">v{APP_VERSION}</span>
+          </div>
           <h1 className="font-display text-4xl leading-tight">Vyberte řetězec</h1>
           <p className="text-sm text-secondary mt-2">Přihlášen jako {profile.full_name}</p>
         </div>
